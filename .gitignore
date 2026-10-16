@@ -2,3 +2,6 @@
 *__pycache__
 .env
 *.db
+.pytest_cache/
+.ruff_cache/
+commit-log.txt

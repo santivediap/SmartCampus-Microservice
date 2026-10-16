@@ -6,6 +6,7 @@ from app.db import get_db
 
 bp = Blueprint("health", __name__)
 
+
 @bp.get("/health")
 def health():
     get_db().execute("SELECT 1")
