@@ -1,31 +1,31 @@
-# Usar una imagen oficial de Python ligera como base
+# Use a lightweight official Python image as base
 FROM python:3.11-slim
 
-# Establecer el directorio de trabajo dentro del contenedor
+# Set the working directory inside the container
 WORKDIR /app
 
-# Evitar que Python escriba archivos .pyc que se generan de forma automática en el disco
+# Prevent Python from writing .pyc files to disk
 ENV PYTHONDONTWRITEBYTECODE=1
-# Asegurar que la salida de Python se envíe directamente a la terminal
+# Send Python output straight to the terminal (no buffering)
 ENV PYTHONUNBUFFERED=1
 
-# Instalamos uv en el contenedor para gestionar las dependencias:
+# Install uv to manage dependencies
 RUN pip install uv
 
-# Copiamos la configuracion de dependencias de los siguientes archivos.
+# Copy dependency definitions first to leverage layer caching
 COPY pyproject.toml uv.lock .
 
-# Instalamos y sincronizamos las dependencias (crea el .venv automaticamente).
-RUN uv sync
+# Install dependencies (creates .venv automatically)
+RUN uv sync --frozen --no-dev
 
-# Añade el entorno virtual al PATH para que el contenedor use sus binarios por defecto
+# Add the virtual environment to PATH so its binaries are used by default
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Copiar el resto del código de la aplicación al contenedor
+# Copy the rest of the application code
 COPY . .
 
-# Puerto en el que se ejecuta Flask (por defecto 5000)
+# Port Flask listens on (default 5000)
 EXPOSE 5000
 
-# Comando para ejecutar la aplicación 
-CMD ["uv", "run", "--", "flask", "run", "--host=0.0.0.0"]
+# Start the application, listening on all container interfaces
+CMD ["uv", "run", "flask", "--app", "wsgi", "run", "--host=0.0.0.0"]
