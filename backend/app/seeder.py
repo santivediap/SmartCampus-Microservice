@@ -6,8 +6,10 @@ Usage:
 """
 
 import argparse
-import json
-import sqlite3
+from datetime import date, time
+
+import psycopg
+from psycopg.types.json import Jsonb
 
 from app.config import Config
 from app.db import connect, init_schema
@@ -39,61 +41,59 @@ ROOMS = [
     },
 ]
 
-# aula_id refers to the position in ROOMS (1-based), resolved at insert time
+# "room" is the position in ROOMS (1-based), resolved to a real id at insert time
 BOOKINGS = [
     {
-        "aula_id": 1,
+        "room": 1,
         "usuario": "ana.garcia",
-        "fecha": "2026-11-02",
-        "hora_inicio": "10:00",
-        "hora_fin": "12:00",
+        "fecha": date(2026, 11, 2),
+        "hora_inicio": time(10, 0),
+        "hora_fin": time(12, 0),
     },
     # Back-to-back with the previous one: allowed (ranges only touch)
     {
-        "aula_id": 1,
+        "room": 1,
         "usuario": "luis.martin",
-        "fecha": "2026-11-02",
-        "hora_inicio": "12:00",
-        "hora_fin": "13:00",
+        "fecha": date(2026, 11, 2),
+        "hora_inicio": time(12, 0),
+        "hora_fin": time(13, 0),
     },
     {
-        "aula_id": 2,
+        "room": 2,
         "usuario": "marta.lopez",
-        "fecha": "2026-11-03",
-        "hora_inicio": "09:00",
-        "hora_fin": "11:00",
+        "fecha": date(2026, 11, 3),
+        "hora_inicio": time(9, 0),
+        "hora_fin": time(11, 0),
     },
     {
-        "aula_id": 3,
+        "room": 3,
         "usuario": "javier.ruiz",
-        "fecha": "2026-11-03",
-        "hora_inicio": "16:00",
-        "hora_fin": "17:30",
+        "fecha": date(2026, 11, 3),
+        "hora_inicio": time(16, 0),
+        "hora_fin": time(17, 30),
     },
     {
-        "aula_id": 4,
+        "room": 4,
         "usuario": "ana.garcia",
-        "fecha": "2026-11-04",
-        "hora_inicio": "15:00",
-        "hora_fin": "18:00",
+        "fecha": date(2026, 11, 4),
+        "hora_inicio": time(15, 0),
+        "hora_fin": time(18, 0),
     },
 ]
 
 
-def clear(conn: sqlite3.Connection) -> None:
-    """Delete all data and reset AUTOINCREMENT counters."""
-    conn.execute("DELETE FROM bookings")
-    conn.execute("DELETE FROM rooms")
-    conn.execute("DELETE FROM sqlite_sequence WHERE name IN ('rooms', 'bookings')")
+def clear(conn: psycopg.Connection) -> None:
+    """Delete all data and restart identity counters."""
+    conn.execute("TRUNCATE bookings, rooms RESTART IDENTITY CASCADE")
 
 
-def seed(conn: sqlite3.Connection, reset: bool = False) -> dict[str, int]:
+def seed(conn: psycopg.Connection, reset: bool = False) -> dict[str, int]:
     """Insert sample data and return how many rows were inserted per table.
 
     Without reset, does nothing if rooms already exist (safe to run twice).
     Runs in a single transaction: either everything is inserted or nothing.
     """
-    with conn:
+    with conn.transaction():
         if reset:
             clear(conn)
         elif conn.execute("SELECT 1 FROM rooms LIMIT 1").fetchone():
@@ -101,23 +101,19 @@ def seed(conn: sqlite3.Connection, reset: bool = False) -> dict[str, int]:
 
         room_ids = []
         for room in ROOMS:
-            cur = conn.execute(
-                "INSERT INTO rooms (nombre, edificio, capacidad, equipamiento) VALUES (?, ?, ?, ?)",
-                (
-                    room["nombre"],
-                    room["edificio"],
-                    room["capacidad"],
-                    json.dumps(room["equipamiento"], ensure_ascii=False),
-                ),
-            )
-            room_ids.append(cur.lastrowid)
+            row = conn.execute(
+                "INSERT INTO rooms (nombre, edificio, capacidad, equipamiento) "
+                "VALUES (%s, %s, %s, %s) RETURNING id",
+                (room["nombre"], room["edificio"], room["capacidad"], Jsonb(room["equipamiento"])),
+            ).fetchone()
+            room_ids.append(row["id"])
 
         for booking in BOOKINGS:
             conn.execute(
                 "INSERT INTO bookings (aula_id, usuario, fecha, hora_inicio, hora_fin) "
-                "VALUES (?, ?, ?, ?, ?)",
+                "VALUES (%s, %s, %s, %s, %s)",
                 (
-                    room_ids[booking["aula_id"] - 1],
+                    room_ids[booking["room"] - 1],
                     booking["usuario"],
                     booking["fecha"],
                     booking["hora_inicio"],
@@ -133,20 +129,16 @@ def main() -> None:
     parser.add_argument("--reset", action="store_true", help="wipe existing data first")
     args = parser.parse_args()
 
-    conn = connect(Config.DB_PATH)
-    try:
+    config = vars(Config)
+    with connect(config) as conn:
         init_schema(conn)
         inserted = seed(conn, reset=args.reset)
-    finally:
-        conn.close()
 
+    target = f"{Config.DB_NAME}@{Config.DB_HOST}"
     if inserted["rooms"] == 0:
-        print(f"Database '{Config.DB_PATH}' already has data. Use --reset to reseed.")
+        print(f"Database '{target}' already has data. Use --reset to reseed.")
     else:
-        print(
-            f"Seeded '{Config.DB_PATH}': {inserted['rooms']} rooms, "
-            f"{inserted['bookings']} bookings."
-        )
+        print(f"Seeded '{target}': {inserted['rooms']} rooms, {inserted['bookings']} bookings.")
 
 
 if __name__ == "__main__":
