@@ -11,3 +11,5 @@ venv/
 *.db
 .git/
 .gitignore
+.pytest_cache/
+.ruff_cache/
