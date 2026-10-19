@@ -1,0 +1,109 @@
+name: SmartCampus CI-CD
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - ci-cd-workflow
+  pull_request:
+    branches:
+      - main
+      - develop
+      - ci-cd-workflow
+
+env:
+  IMAGE_REPOSITORY: hansjeffa/smartcampus-backend
+
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      # Cancela la ejecucion si una version falla
+      fail-fast: true
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      # Etapa 1 — Checkout
+      - name: Download the code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true # Acelera las ejecuciones futuras guardando caché
+      
+      - name: Config Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      # Etapa 2 — Instalación
+      - name: Install dependencies
+        working-directory: ./backend
+        run: uv sync --frozen --no-dev
+      
+      # Etapa 3 — Calidad
+      - name: Quality analysis (Linting)
+        working-directory: ./backend
+        # Look for syntax errors, unused variables, or bad practices.
+        run: uv run ruff check .
+
+      - name: Format verification
+        working-directory: ./backend
+        # Verify that the code is correctly tabulation and order (without modifying it).
+        run: uv run ruff format --check .
+      
+      # Etapa 4: Test
+      - name: Execute automated tests
+        working-directory: ./backend
+        run: uv run pytest
+
+  build-image:
+    runs-on: ubuntu-latest
+    needs: run-tests # Ensures that stage 5 will only be executed if Stage 3 and the tests have passed
+    steps:
+      - name: Download the code
+        uses: actions/checkout@v4
+
+      - name: Config docker buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login in Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
+      # Etapa 5 — Build
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          # It tells Docker to use the Dockerfile in this folder.
+          context: ./backend
+          # Keep set to `false` when submitting pull requests, and change to `true` for the final version.
+          push: false
+          # Despues de construir la imagen, la guarde en el sistema local Nota:Necesario para la etapa 6.
+          load: true
+          tags: ${{ env.IMAGE_REPOSITORY }}:latest
+      
+      # Etapa 6 - Validation
+      - name: Ejecutar y comprobar contenedor
+        run: |
+          # 1. Iniciar el contenedor en segundo plano (-d)
+          docker run -d -p 5000:5000 --name smartcampus-solutions-app ${{ env.IMAGE_REPOSITORY }}:latest
+          
+          # 2. Esperar 5 segundos para darle tiempo a Flask (vía uv run) de arrancar
+          sleep 5
+          
+          # 3. Comprobar el estado del contenedor
+          ESTADO=$(docker inspect -f '{{.State.Running}}' smartcampus-solutions-app)
+          
+          if [ "$ESTADO" = "true" ]; then
+            echo "✅ Validación correcta: El contenedor está iniciado y ejecutándose."
+          else
+            echo "❌ Error: El contenedor se apagó inesperadamente o no responde. Mostrando logs:"
+            docker logs smartcampus-solutions-app
+            exit 1
+          fi
