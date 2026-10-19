@@ -23,6 +23,22 @@ jobs:
       fail-fast: true
       matrix:
         python-version: ["3.11", "3.12"]
+    
+    # Add PostgreSQL services 
+    services:
+      db:
+        image: postgres:15
+        env:
+          POSTGRES_USER: user_test
+          POSTGRES_PASSWORD: test123
+          POSTGRES_DB: smartcampus-test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       # Etapa 1 — Checkout
@@ -58,6 +74,8 @@ jobs:
       # Etapa 4: Test
       - name: Execute automated tests
         working-directory: ./backend
+        env:
+          DATABASE_URL: postgresql://user_test:test123@localhost:5432/smartcampus-test
         run: uv run pytest
 
   build-image:
