@@ -50,6 +50,7 @@ jobs:
         with:
           enable-cache: true # Acelera las ejecuciones futuras guardando caché
       
+      # Matrix en GitHub Actions
       - name: Config Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
@@ -75,11 +76,7 @@ jobs:
       - name: Execute automated tests
         working-directory: ./backend
         env:
-          DB_HOST: localhost
-          DB_PORT: 5432
-          DB_NAME: smartcampus-test
-          DB_USER: user_test
-          DB_PASSWORD: test123
+          DATABASE_URL: postgresql://user_test:test123@localhost:5432/smartcampus_test
         run: uv run pytest
 
   build-image:
