@@ -75,7 +75,11 @@ jobs:
       - name: Execute automated tests
         working-directory: ./backend
         env:
-          DATABASE_URL: postgresql://user_test:test123@localhost:5432/smartcampus-test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: smartcampus-test
+          DB_USER: user_test
+          DB_PASSWORD: test123
         run: uv run pytest
 
   build-image:
