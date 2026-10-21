@@ -1,0 +1,16 @@
+services:
+  backend:
+    # Construye la imagen usando el Dockerfile dentro de la carpeta "backend"
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    # Nombre que le dará a la imagen una vez construida
+    image: smartcampus-backend:latest
+    # Nombre exacto del contenedor cuando esté en ejecución
+    container_name: smartcampus-solutions-app
+    # Mapeo de puertos (Puerto_Host:Puerto_Contenedor)
+    ports:
+      - "5000:5000"
+    # Política de reinicio: se reiniciará automáticamente si falla o si reinicias la máquina,
+    # a menos que lo detengas manualmente. Ideal para tu self-hosted runner.
+    restart: unless-stopped
