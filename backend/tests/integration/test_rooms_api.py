@@ -84,3 +84,34 @@ def test_non_numeric_id_returns_json_404(client):
 
     assert response.status_code == 404
     assert "error" in response.get_json()
+
+
+@pytest.mark.parametrize("capacidad", ["30", 12.5, None])
+def test_create_room_with_non_integer_capacity_returns_400(client, capacidad):
+    response = client.post("/rooms", json={**ROOM, "capacidad": capacidad})
+
+    assert response.status_code == 400
+    assert "capacidad" in response.get_json()["error"]
+
+
+def test_delete_room_twice_returns_404_the_second_time(client, created_room):
+    path = f"/rooms/{created_room['id']}"
+
+    assert client.delete(path).status_code == 204
+    assert client.delete(path).status_code == 404
+
+
+def test_delete_room_also_deletes_its_bookings(client, db_conn, created_room):
+    db_conn.execute(
+        "INSERT INTO bookings (aula_id, usuario, fecha, hora_inicio, hora_fin) "
+        "VALUES (%s, 'test', '2026-11-02', '10:00', '11:00')",
+        (created_room["id"],),
+    )
+    db_conn.commit()
+
+    assert client.delete(f"/rooms/{created_room['id']}").status_code == 204
+
+    remaining = db_conn.execute(
+        "SELECT COUNT(*) AS n FROM bookings WHERE aula_id = %s", (created_room["id"],)
+    ).fetchone()["n"]
+    assert remaining == 0
