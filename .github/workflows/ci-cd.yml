@@ -29,8 +29,8 @@ jobs:
       db:
         image: postgres:15
         env:
-          POSTGRES_USER: user_test
-          POSTGRES_DB: smartcampus-test
+          POSTGRES_USER: smartcampus
+          POSTGRES_DB: smartcampus_test
           # Esta línea le dice a PostgreSQL que acepte conexiones sin contraseña
           POSTGRES_HOST_AUTH_METHOD: trust
         ports:
@@ -77,7 +77,7 @@ jobs:
       - name: Execute automated tests
         working-directory: ./backend
         env:
-          DATABASE_URL: postgresql://user_test@localhost:5432/smartcampus_test
+          DATABASE_URL: postgresql://smartcampus@localhost:5432/smartcampus_test
         run: uv run pytest
 
   build-image:
