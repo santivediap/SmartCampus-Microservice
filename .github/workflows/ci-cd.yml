@@ -111,13 +111,28 @@ jobs:
       # Etapa 6 - Validation
       - name: Ejecutar y comprobar contenedor
         run: |
-          # 1. Iniciar el contenedor en segundo plano (-d)
-          docker run -d -p 5000:5000 --name smartcampus-solutions-app ${{ env.IMAGE_REPOSITORY }}:latest
-          
-          # 2. Esperar 5 segundos para darle tiempo a Flask (vía uv run) de arrancar
+          # Crear una red de Docker para la comunicacion entre contenedores
+          docker network create test-net
+
+          # Iniciar base de datos temporal en esa red
+          docker run -d --name test-db --network test-net \
+            -e POSTGRES_USER=smartcampus \
+            -e POSTGRES_DB=smartcampus_test \
+            -e POSTGRES_HOST_AUTH_METHOD=trust \
+            postgres:15
+            
+          # Tiempo para que arranque la DB
+          sleep 3
+
+          # Iniciar el contenedor en segundo plano (-d) conectándolo a la misma red 
+          docker run -d -p 5000:5000 --name smartcampus-solutions-app --network test-net \
+            -e DATABASE_URL=postgresql://smartcampus@test-db:5432/smartcampus_test \
+            ${{ env.IMAGE_REPOSITORY }}:latest
+
+          # Esperar 5 segundos para darle tiempo a Flask (vía uv run) de arrancar
           sleep 5
           
-          # 3. Comprobar el estado del contenedor
+          # Comprobar el estado del contenedor
           ESTADO=$(docker inspect -f '{{.State.Running}}' smartcampus-solutions-app)
           
           if [ "$ESTADO" = "true" ]; then
