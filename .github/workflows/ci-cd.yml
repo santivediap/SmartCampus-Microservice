@@ -133,7 +133,6 @@ jobs:
 
   deploy-app:
     needs: build-image
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: self-hosted
     concurrency: production
     steps:
