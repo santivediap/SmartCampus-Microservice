@@ -13,7 +13,7 @@ on:
       - ci-cd-workflow
 
 env:
-  IMAGE_REPOSITORY: hansjeffa/smartcampus-backend
+  IMAGE_REPOSITORY: ${{ secrets.DOCKER_USERNAME }}/smartcampus-backend
 
 jobs:
   run-tests:
@@ -30,7 +30,7 @@ jobs:
         image: postgres:15
         env:
           POSTGRES_USER: smartcampus
-          POSTGRES_DB: smartcampus_test
+          POSTGRES_DB: smartcampus
           # Esta línea le dice a PostgreSQL que acepte conexiones sin contraseña
           POSTGRES_HOST_AUTH_METHOD: trust
         ports:
@@ -117,15 +117,18 @@ jobs:
           # Iniciar base de datos temporal en esa red
           docker run -d --name test-db --network test-net \
             -e POSTGRES_USER=smartcampus \
-            -e POSTGRES_DB=smartcampus_test \
+            -e POSTGRES_DB=smartcampus \
             -e POSTGRES_HOST_AUTH_METHOD=trust \
             postgres:15
             
           # Tiempo para que arranque la DB
           sleep 3
 
-          # Iniciar el contenedor en segundo plano (-d) conectándolo a la misma red 
+          # IIniciar el contenedor en segundo plano (-d) conectándolo a la misma red inyectando las variables individuales que lee Flask
           docker run -d -p 5000:5000 --name smartcampus-solutions-app --network test-net \
+            -e DB_HOST=test-db \
+            -e DB_USER=smartcampus \
+            -e DB_NAME=smartcampus \
             -e DATABASE_URL=postgresql://smartcampus@test-db:5432/smartcampus_test \
             ${{ env.IMAGE_REPOSITORY }}:latest
 
