@@ -77,7 +77,7 @@ jobs:
       - name: Execute automated tests
         working-directory: ./backend
         env:
-          DATABASE_URL: postgresql://smartcampus@localhost:5432/smartcampus_test
+          DATABASE_URL: postgresql://smartcampus@localhost:5432/smartcampus
         run: uv run pytest
 
   build-image:
@@ -102,8 +102,8 @@ jobs:
         with:
           # It tells Docker to use the Dockerfile in this folder.
           context: ./backend
-          # Keep set to `false` when submitting pull requests, and change to `true` for the final version.
-          push: false
+          # Sube la imagen a Docker Hub solo si estamos en main.
+          push: ${{ github.ref == 'refs/heads/main' }}
           # Despues de construir la imagen, la guarde en el sistema local Nota:Necesario para la etapa 6.
           load: true
           tags: ${{ env.IMAGE_REPOSITORY }}:latest
@@ -124,12 +124,12 @@ jobs:
           # Tiempo para que arranque la DB
           sleep 3
 
-          # IIniciar el contenedor en segundo plano (-d) conectándolo a la misma red inyectando las variables individuales que lee Flask
+          # Iniciar el contenedor en segundo plano (-d) conectándolo a la misma red inyectando las variables individuales que lee Flask
           docker run -d -p 5000:5000 --name smartcampus-solutions-app --network test-net \
             -e DB_HOST=test-db \
             -e DB_USER=smartcampus \
             -e DB_NAME=smartcampus \
-            -e DATABASE_URL=postgresql://smartcampus@test-db:5432/smartcampus_test \
+            -e DATABASE_URL=postgresql://smartcampus@test-db:5432/smartcampus \
             ${{ env.IMAGE_REPOSITORY }}:latest
 
           # Esperar 5 segundos para darle tiempo a Flask (vía uv run) de arrancar
@@ -145,3 +145,29 @@ jobs:
             docker logs smartcampus-solutions-app
             exit 1
           fi
+  
+  deploy-app:
+    needs: build-image # Solo se ejecuta si la imagen se construyó y validó con éxito
+    runs-on: self-hosted # Ejecuta los comandos en tu propia máquina configurada
+    
+    # Opcional pero muy recomendado: Solo desplegar si los cambios se hacen en la rama "main"
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - name: Download the code
+        uses: actions/checkout@v4
+        
+      - name: Etapa 7 — Deploy
+        run: |
+          echo "Iniciando despliegue automatizado..."
+          
+          # Descargar la imagen más reciente desde Docker Hub
+          docker compose pull
+          
+          # Levantar la base de datos persistente y la nueva versión de la app (-d las deja corriendo en segundo plano)
+          docker compose up -d
+          
+          # Limpiar imágenes viejas reduciendo la memoria en el disco
+          docker image prune -f
+          
+          echo "✅ Despliegue completado con éxito."
