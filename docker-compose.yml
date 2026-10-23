@@ -1,16 +1,31 @@
 services:
+  # Base de datos permanente
+  db:
+    image: postgres:15
+    container_name: smartcampus-db
+    restart: always
+    environment:
+      POSTGRES_USER: smartcampus
+      POSTGRES_DB: smartcampus
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  # Tu aplicación web
   backend:
-    # Construye la imagen usando el Dockerfile dentro de la carpeta "backend"
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    # Nombre que le dará a la imagen una vez construida
-    image: smartcampus-backend:latest
-    # Nombre exacto del contenedor cuando esté en ejecución
-    container_name: smartcampus-solutions-app
-    # Mapeo de puertos (Puerto_Host:Puerto_Contenedor)
+    # Asegúrate de usar el mismo nombre de repositorio que en tu ci-cd.yml
+    image: hansjeffa/smartcampus-backend:latest
+    container_name: smartcampus-app
+    restart: always
     ports:
       - "5000:5000"
-    # Política de reinicio: se reiniciará automáticamente si falla o si reinicias la máquina,
-    # a menos que lo detengas manualmente. Ideal para tu self-hosted runner.
-    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_USER: smartcampus
+      DB_NAME: smartcampus
+      DATABASE_URL: postgresql://smartcampus@db:5432/smartcampus
+    depends_on:
+      - db
+
+volumes:
+  db_data:
