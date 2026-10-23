@@ -1,0 +1,45 @@
+services:
+  # Persistent database
+  db:
+    image: postgres:15
+    container_name: smartcampus-db
+    restart: always
+    environment:
+      POSTGRES_USER: smartcampus
+      POSTGRES_DB: smartcampus
+      # Injected from GitHub Secrets via the workflow env
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD not set}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartcampus -d smartcampus"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Web application
+  backend:
+    # Commit SHA from the workflow; falls back to latest for local runs
+    image: hansjeffa/smartcampus-backend:${IMAGE_TAG:-latest}
+    container_name: smartcampus-app
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      DB_HOST: db
+      DB_USER: smartcampus
+      DB_NAME: smartcampus
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD not set}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # Adjust the path to your app's health endpoint
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  db_data:
