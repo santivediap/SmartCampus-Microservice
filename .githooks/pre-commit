@@ -1,0 +1,23 @@
+#!/bin/bash
+echo "Ejecutando linter y tests unitarios..."
+
+# Moverse al directorio del código
+cd backend || exit 1
+
+# Comprobar formato/calidad (usando Ruff)
+ruff check .
+# Guarda la salida del comando anterior; un valor de 0 significa éxito y cualquier otro número indica error.
+LINT_STATUS=$?
+
+# Ejecuta tests unitarios
+pytest tests/unit/
+# Guarda el resultado del comando anterior; un valor de 0 significa éxito y cualquier otro número indica error.
+TEST_STATUS=$?
+
+# Comprobar si alguna de las dos variables es distinta de cero.
+if [ $LINT_STATUS -ne 0 ] || [ $TEST_STATUS -ne 0 ]; then
+    echo "❌ Commit rechazado: falló la validación o los tests"
+    exit 1
+fi
+
+exit 0

@@ -5,12 +5,12 @@ on:
     branches:
       - main
       - develop
-      - ci-cd-workflow
+      - create-git-hooks
   pull_request:
     branches:
       - main
       - develop
-      - ci-cd-workflow
+      - create-git-hooks
 
 env:
   IMAGE_REPOSITORY: ${{ secrets.DOCKER_USERNAME }}/smartcampus-backend

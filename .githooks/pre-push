@@ -1,0 +1,17 @@
+#!/bin/bash
+echo "Verificando tests antes de hacer push..."
+
+# Moverse al directorio del código
+cd backend || exit 1
+
+# Ejecutar todos los tests (unitarios + integración)
+pytest tests/
+TEST_STATUS=$?
+
+if [ $TEST_STATUS -ne 0 ]; then
+    echo "❌ Push rechazado: existen tests fallidos"
+    exit 1
+else
+    echo "✅ Todos los tests superados"
+    exit 0
+fi

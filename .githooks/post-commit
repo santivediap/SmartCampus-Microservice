@@ -1,0 +1,22 @@
+#!/bin/bash
+# Variable donde se guardara el historial
+LOG_FILE="commit-log.txt"
+
+# Usando el comando git y distintos parametros como:
+# -1 (Apunta al ultimo commit), %an (Extrae nombre del autor), %h (Obtiene el identificador alfanumérico)
+# %s (Captura el mensaje del commit), %ad (Extrae la fecha en la que se creó el commit)
+AUTHOR=$(git log -1 --pretty=format:'%an')
+HASH=$(git log -1 --pretty=format:'%h')
+MESSAGE=$(git log -1 --pretty=format:'%s')
+DATE=$(git log -1 --date=format:'%d/%m/%Y' --pretty=format:'%ad')
+
+#Agrupa los textos estructurados y con >> añade todo en la ultima linea sin borrar el historial.
+{
+    echo "Autor: $AUTHOR"
+    echo "Hash: $HASH"
+    echo "Mensaje: $MESSAGE"
+    echo "Fecha: $DATE"
+    echo "---------------------------"
+} >> "$LOG_FILE"
+
+echo "📝 Log actualizado en $LOG_FILE"
