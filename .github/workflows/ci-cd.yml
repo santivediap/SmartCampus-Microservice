@@ -14,8 +14,34 @@ on:
 
 env:
   IMAGE_REPOSITORY: ${{ secrets.DOCKER_USERNAME }}/smartcampus-backend
+  FRONTEND_IMAGE_REPOSITORY: ${{ secrets.DOCKER_USERNAME }}/smartcampus-frontend
 
 jobs:
+  # Frontend quality: lint + production build (runs in parallel with backend tests)
+  frontend-checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Build (Vite)
+        run: npm run build
+
   run-tests:
     runs-on: ubuntu-latest
     strategy:
@@ -83,18 +109,25 @@ jobs:
   
   build-image:
     runs-on: ubuntu-latest
-    needs: run-tests
+    needs: [run-tests, frontend-checks]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
 
       # Stage 5 — Build (local only, nothing is published yet)
-      - name: Build Docker image
+      - name: Build backend Docker image
         uses: docker/build-push-action@v5
         with:
           context: ./backend
           load: true
           tags: smartcampus:${{ github.sha }}
+
+      - name: Build frontend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          load: true
+          tags: smartcampus-frontend:${{ github.sha }}
 
       # Stage 6 — Validation: app must answer /health (which also queries the DB)
       - name: Run container and check /health
@@ -116,6 +149,18 @@ jobs:
           curl --fail --retry 10 --retry-delay 2 --retry-all-errors \
             http://localhost:5000/health || { docker logs app; exit 1; }
 
+      # Stage 6 — Validation: frontend serves the UI and reaches the backend through /api
+      - name: Run frontend and check UI + API proxy
+        run: |
+          docker run -d --name front --network test-net -p 8080:80 \
+            -e BACKEND_URL=http://app:5000 smartcampus-frontend:${{ github.sha }}
+
+          curl --fail --silent --show-error --retry 10 --retry-delay 2 --retry-all-errors \
+            -o /dev/null http://localhost:8080/ || { docker logs front; exit 1; }
+
+          curl --fail --silent --show-error --retry 10 --retry-delay 2 --retry-all-errors \
+            http://localhost:8080/api/health || { docker logs front; docker logs app; exit 1; }
+
       # Publish only validated images, only on push to main
       - name: Login to Docker Hub
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -124,12 +169,16 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Push image
+      - name: Push images
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           docker tag smartcampus:${{ github.sha }} $IMAGE_REPOSITORY:${{ github.sha }}
           docker tag smartcampus:${{ github.sha }} $IMAGE_REPOSITORY:latest
           docker push --all-tags $IMAGE_REPOSITORY
+
+          docker tag smartcampus-frontend:${{ github.sha }} $FRONTEND_IMAGE_REPOSITORY:${{ github.sha }}
+          docker tag smartcampus-frontend:${{ github.sha }} $FRONTEND_IMAGE_REPOSITORY:latest
+          docker push --all-tags $FRONTEND_IMAGE_REPOSITORY
 
   deploy-app:
     needs: build-image
@@ -144,6 +193,6 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
-          docker compose pull backend
-          docker compose up -d --wait
+          docker compose pull backend frontend
+          docker compose up -d --wait --no-build
           docker image prune -f
