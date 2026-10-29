@@ -1,0 +1,44 @@
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Compress text responses
+    gzip on;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+
+    # Resolve the backend at request time, not at startup, so nginx starts even
+    # when the backend is down (returns 502 until it is back).
+    # NGINX_LOCAL_RESOLVERS is filled by the official image from /etc/resolv.conf
+    # (127.0.0.11 in Docker, kube-dns in Kubernetes).
+    resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
+    resolver_timeout 5s;
+
+    # Reverse proxy to the backend, stripping the /api prefix: /api/rooms -> /rooms
+    # Same behaviour as the Vite dev proxy, so the browser never needs CORS.
+    location /api/ {
+        # A variable in proxy_pass forces the per-request DNS lookup
+        set $backend_upstream ${BACKEND_URL};
+        rewrite ^/api/(.*)$ /$1 break;
+        proxy_pass $backend_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Vite puts hashed files in /assets, so they can be cached for a long time
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    # SPA fallback: unknown paths return index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
