@@ -5,12 +5,12 @@ echo "Ejecutando linter y tests unitarios..."
 cd backend || exit 1
 
 # Comprobar formato/calidad (usando Ruff)
-ruff check .
+uv run ruff check .
 # Guarda la salida del comando anterior; un valor de 0 significa éxito y cualquier otro número indica error.
 LINT_STATUS=$?
 
 # Ejecuta tests unitarios
-pytest tests/unit/
+uv run pytest tests/unit/
 # Guarda el resultado del comando anterior; un valor de 0 significa éxito y cualquier otro número indica error.
 TEST_STATUS=$?
 
