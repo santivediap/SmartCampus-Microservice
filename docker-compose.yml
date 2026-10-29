@@ -11,16 +11,20 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD not set}
     volumes:
       - db_data:/var/lib/postgresql/data
+    networks:
+      - smartcampus-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartcampus -d smartcampus"]
       interval: 5s
       timeout: 3s
       retries: 10
 
-  # Web application
+  # REST API
   backend:
     # Commit SHA from the workflow; falls back to latest for local runs
     image: hansjeffa/smartcampus-backend:${IMAGE_TAG:-latest}
+    # Used by "docker compose up --build" when developing locally
+    build: ./backend
     container_name: smartcampus-app
     restart: always
     ports:
@@ -30,16 +34,39 @@ services:
       DB_USER: smartcampus
       DB_NAME: smartcampus
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD not set}
+    networks:
+      - smartcampus-net
     depends_on:
       db:
         condition: service_healthy
     healthcheck:
-      # Adjust the path to your app's health endpoint
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
       interval: 10s
       timeout: 3s
       retries: 5
       start_period: 15s
+
+  # Web UI: nginx serves the React build and proxies /api/* to the backend
+  frontend:
+    image: hansjeffa/smartcampus-frontend:${IMAGE_TAG:-latest}
+    build: ./frontend
+    container_name: smartcampus-frontend
+    restart: always
+    ports:
+      - "8080:80"
+    environment:
+      # Service name resolved by Docker's internal DNS on smartcampus-net
+      BACKEND_URL: http://backend:5000
+    networks:
+      - smartcampus-net
+    depends_on:
+      backend:
+        condition: service_healthy
+    # Healthcheck is defined in frontend/Dockerfile
+
+networks:
+  smartcampus-net:
+    driver: bridge
 
 volumes:
   db_data:
