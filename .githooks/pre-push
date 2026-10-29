@@ -15,7 +15,7 @@ fi
 cd backend || exit 1
 
 # Run all tests (unit + integration)
-pytest tests/
+uv run pytest tests/
 TEST_STATUS=$?
 
 if [ $TEST_STATUS -ne 0 ]; then
