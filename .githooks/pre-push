@@ -23,5 +23,6 @@ if [ $TEST_STATUS -ne 0 ]; then
     exit 1
 else
     echo "✅ Todos los tests superados"
+    docker compose down -v
     exit 0
 fi
