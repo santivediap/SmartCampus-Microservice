@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # SmartCampus Microservice
 
 Repositorio: https://github.com/santivediap/SmartCampus-Microservice
@@ -445,3 +446,5 @@ Capturas en `docs/evidencias/`.
 | Escalado a 4 réplicas | ![scale](docs/evidencias/k8s-scale.png) |
 | Self-healing | ![self-healing](docs/evidencias/k8s-self-healing.png) |
 | Aplicación desplegada (Kubernetes) | ![app-k8s](docs/evidencias/app-k8s.png) |
+=======
+>>>>>>> refs/remotes/origin/develop
