@@ -1,0 +1,79 @@
+# PostgreSQL as a StatefulSet: stable Pod name (database-0) and its own
+# PersistentVolumeClaim that survives Pod deletion and rescheduling.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: database
+  namespace: smartcampus
+  labels:
+    app: database
+    app.kubernetes.io/part-of: smartcampus
+spec:
+  # Governing headless Service (see database-service.yaml)
+  serviceName: database-headless
+  # A single primary: plain Postgres replicas would not share data
+  replicas: 1
+  selector:
+    matchLabels:
+      app: database
+  template:
+    metadata:
+      labels:
+        app: database
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: smartcampus-config
+                  key: DB_NAME
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: smartcampus-secret
+                  key: DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: smartcampus-secret
+                  key: DB_PASSWORD
+            # Subdirectory avoids initdb failing on the volume's lost+found
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: db-data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -h 127.0.0.1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -h 127.0.0.1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+  # One PVC per replica (database-0 -> db-data-database-0), provisioned by
+  # Minikube's default "standard" StorageClass
+  volumeClaimTemplates:
+    - metadata:
+        name: db-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

@@ -1,0 +1,394 @@
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+.muted {
+  color: var(--muted);
+  margin: 0;
+}
+
+/* Header */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.topbar h1 {
+  font-size: 1.6rem;
+}
+
+.health {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.health .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.health-up .dot {
+  background: var(--ok);
+}
+
+.health-down .dot {
+  background: var(--danger);
+}
+
+/* Layout */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 20px;
+  align-items: start;
+}
+
+.side {
+  display: grid;
+  gap: 20px;
+}
+
+.panel-bookings {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 860px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+  scroll-margin-top: 16px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.panel-head h2 {
+  font-size: 1.1rem;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-text);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary);
+  filter: brightness(1.08);
+}
+
+.btn-danger {
+  color: var(--danger);
+}
+
+.btn-danger.is-armed {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.btn:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Rooms */
+.room-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.room-card,
+.result-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.room-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.room-head h3 {
+  font-size: 1rem;
+}
+
+.tag {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.room-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chips li {
+  font-size: 0.78rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+
+.room-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+/* Forms */
+.form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.field-wide {
+  grid-column: 1 / -1;
+}
+
+.field-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+input,
+select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 0.95rem;
+}
+
+.field-inline select {
+  width: auto;
+}
+
+.room-form {
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.room-form .chips li {
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.count {
+  font-size: 0.95rem;
+  font-weight: 400;
+  margin-left: 4px;
+}
+
+.search {
+  display: grid;
+  gap: 12px;
+}
+
+.search-bar {
+  display: flex;
+  gap: 8px;
+}
+
+.result-card dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.result-card dt {
+  color: var(--muted);
+}
+
+.result-card dd {
+  margin: 0;
+}
+
+/* Alerts */
+.alert {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.alert-error {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+/* Bookings table */
+.table-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+th {
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+tbody tr:hover {
+  background: var(--surface-2);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.actions {
+  text-align: right;
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+}
+
+.toast-ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border: 1px solid var(--ok);
+}
+
+.toast-error {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}

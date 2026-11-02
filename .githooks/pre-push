@@ -1,0 +1,28 @@
+#!/bin/bash
+echo "Verificando tests antes de hacer push..."
+
+# Load DB credentials from the repo root .env (hooks run from the repo root)
+if [ -f .env ]; then
+    set -a
+    . ./.env
+    set +a
+else
+    echo "❌ Push rechazado: falta el archivo .env en la raíz del repo"
+    exit 1
+fi
+
+# Move to the backend source directory
+cd backend || exit 1
+
+# Run all tests (unit + integration)
+uv run pytest tests/
+TEST_STATUS=$?
+
+if [ $TEST_STATUS -ne 0 ]; then
+    echo "❌ Push rechazado: existen tests fallidos"
+    exit 1
+else
+    echo "✅ Todos los tests superados"
+    docker compose down -v
+    exit 0
+fi

@@ -1,0 +1,242 @@
+name: SmartCampus CI-CD
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - create-git-hooks
+  pull_request:
+    branches:
+      - main
+      - develop
+      - create-git-hooks
+
+env:
+  IMAGE_REPOSITORY: ${{ secrets.DOCKER_USERNAME }}/smartcampus-backend
+  FRONTEND_IMAGE_REPOSITORY: ${{ secrets.DOCKER_USERNAME }}/smartcampus-frontend
+
+jobs:
+  # Frontend quality: lint + production build (runs in parallel with backend tests)
+  frontend-checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Build (Vite)
+        run: npm run build
+
+  run-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      # Cancela la ejecucion si una version falla
+      fail-fast: true
+      matrix:
+        python-version: ["3.11", "3.12"]
+    
+    # Add PostgreSQL services 
+    services:
+      db:
+        image: postgres:15
+        env:
+          POSTGRES_USER: smartcampus
+          POSTGRES_DB: smartcampus
+          # Esta línea le dice a PostgreSQL que acepte conexiones sin contraseña
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      # Etapa 1 — Checkout
+      - name: Download the code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true # Acelera las ejecuciones futuras guardando caché
+      
+      # Matrix en GitHub Actions
+      - name: Config Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      # Etapa 2 — Instalación
+      - name: Install dependencies
+        working-directory: ./backend
+        run: uv sync --frozen --no-dev
+      
+      # Etapa 3 — Calidad
+      - name: Quality analysis (Linting)
+        working-directory: ./backend
+        # Look for syntax errors, unused variables, or bad practices.
+        run: uv run ruff check .
+
+      - name: Format verification
+        working-directory: ./backend
+        # Verify that the code is correctly tabulation and order (without modifying it).
+        run: uv run ruff format --check .
+      
+      # Etapa 4: Test
+      - name: Execute automated tests
+        working-directory: ./backend
+        env:
+          DB_HOST: localhost
+          DB_USER: smartcampus
+        run: uv run pytest
+  
+  build-image:
+    runs-on: ubuntu-latest
+    needs: [run-tests, frontend-checks]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      # Stage 5 — Build (local only, nothing is published yet)
+      - name: Build backend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          load: true
+          tags: smartcampus-backend:${{ github.sha }}
+
+      - name: Build frontend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          load: true
+          tags: smartcampus-frontend:${{ github.sha }}
+
+      # Stage 6 — Validation: app must answer /health (which also queries the DB)
+      - name: Run container and check /health
+        run: |
+          docker network create test-net
+          docker run -d --name test-db --network test-net \
+            -e POSTGRES_USER=smartcampus -e POSTGRES_DB=smartcampus \
+            -e POSTGRES_HOST_AUTH_METHOD=trust postgres:15
+
+          # TCP check: the init-time temp server only listens on the unix socket
+          for i in $(seq 30); do
+            docker exec test-db pg_isready -h localhost -U smartcampus && break
+            sleep 2
+          done
+
+          docker run -d --name app --network test-net -p 5000:5000 \
+            -e DB_HOST=test-db smartcampus-backend:${{ github.sha }}
+
+          curl --fail --retry 10 --retry-delay 2 --retry-all-errors \
+            http://localhost:5000/health || { docker logs app; exit 1; }
+
+      # Stage 6 — Validation: frontend serves the UI and reaches the backend through /api
+      - name: Run frontend and check UI + API proxy
+        run: |
+          docker run -d --name front --network test-net -p 8080:80 \
+            -e BACKEND_URL=http://app:5000 smartcampus-frontend:${{ github.sha }}
+
+          curl --fail --silent --show-error --retry 10 --retry-delay 2 --retry-all-errors \
+            -o /dev/null http://localhost:8080/ || { docker logs front; exit 1; }
+
+          curl --fail --silent --show-error --retry 10 --retry-delay 2 --retry-all-errors \
+            http://localhost:8080/api/health || { docker logs front; docker logs app; exit 1; }
+
+      # Publish only validated images, only on push to main
+      - name: Login to Docker Hub
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Push images
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          docker tag smartcampus-backend:${{ github.sha }} $IMAGE_REPOSITORY:${{ github.sha }}
+          docker tag smartcampus-backend:${{ github.sha }} $IMAGE_REPOSITORY:latest
+          docker push --all-tags $IMAGE_REPOSITORY
+
+          docker tag smartcampus-frontend:${{ github.sha }} $FRONTEND_IMAGE_REPOSITORY:${{ github.sha }}
+          docker tag smartcampus-frontend:${{ github.sha }} $FRONTEND_IMAGE_REPOSITORY:latest
+          docker push --all-tags $FRONTEND_IMAGE_REPOSITORY
+
+  deploy-compose:
+    needs: build-image
+    runs-on: self-hosted
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    concurrency: production-compose
+    steps:
+      - uses: actions/checkout@v4
+      # Stage 7 — Deploy: secrets injected at runtime, never written to the repo
+      - name: Deploy with Docker Compose
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          docker compose pull backend frontend
+          docker compose up -d --wait --no-build
+          docker image prune -f
+
+  deploy-minikube:
+    needs: deploy-compose # Espera a que termine Docker Compose para no saturar el servidor
+    runs-on: self-hosted
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    concurrency: production-minikube
+    steps:
+      - uses: actions/checkout@v4
+      # Stage 7 — Deploy: secrets injected at runtime, never written to the repo
+
+      - name: Asegurar que Minikube está en ejecución
+        run: minikube status || minikube start
+        
+      - name: Deploy with Minikube
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+
+        run: |
+          # 1. Cargar las imágenes en Minikube
+          minikube image load ${{ env.IMAGE_REPOSITORY }}:${{ github.sha }}
+          minikube image load ${{ env.FRONTEND_IMAGE_REPOSITORY }}:${{ github.sha }}
+
+          # 2. Reemplazar dinámicamente las etiquetas en los YAML
+          sed -i "s|image: ${{ env.IMAGE_REPOSITORY }}:.*|image: ${{ env.IMAGE_REPOSITORY }}:${{ github.sha }}|g" k8s/backend-deployment.yaml
+          sed -i "s|image: ${{ env.FRONTEND_IMAGE_REPOSITORY }}:.*|image: ${{ env.FRONTEND_IMAGE_REPOSITORY }}:${{ github.sha }}|g" k8s/frontend-deployment.yaml
+
+          # 3. Namespace primero: el resto de recursos dependen de él
+          kubectl apply -f k8s/namespace.yaml
+
+          # 4. Secret creado desde GitHub Secrets (idempotente, nunca se escribe en el repo)
+          kubectl -n smartcampus create secret generic smartcampus-secret \
+            --from-literal=DB_USER=smartcampus \
+            --from-literal=DB_PASSWORD="$DB_PASSWORD" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # 5. Aplicar los manifiestos
+          kubectl apply -f k8s/
+
+          # 6. Esperar a que todo esté listo (falla el job si no arranca)
+          kubectl -n smartcampus rollout status statefulset/database --timeout=180s
+          kubectl -n smartcampus rollout status deployment/backend --timeout=180s
+          kubectl -n smartcampus rollout status deployment/frontend --timeout=120s
+          kubectl -n smartcampus get pods,services,deployments,statefulsets
