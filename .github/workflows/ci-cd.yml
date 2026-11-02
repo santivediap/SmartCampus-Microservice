@@ -120,7 +120,7 @@ jobs:
         with:
           context: ./backend
           load: true
-          tags: smartcampus:${{ github.sha }}
+          tags: smartcampus-backend:${{ github.sha }}
 
       - name: Build frontend Docker image
         uses: docker/build-push-action@v5
@@ -144,7 +144,7 @@ jobs:
           done
 
           docker run -d --name app --network test-net -p 5000:5000 \
-            -e DB_HOST=test-db smartcampus:${{ github.sha }}
+            -e DB_HOST=test-db smartcampus-backend:${{ github.sha }}
 
           curl --fail --retry 10 --retry-delay 2 --retry-all-errors \
             http://localhost:5000/health || { docker logs app; exit 1; }
@@ -172,19 +172,19 @@ jobs:
       - name: Push images
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
-          docker tag smartcampus:${{ github.sha }} $IMAGE_REPOSITORY:${{ github.sha }}
-          docker tag smartcampus:${{ github.sha }} $IMAGE_REPOSITORY:latest
+          docker tag smartcampus-backend:${{ github.sha }} $IMAGE_REPOSITORY:${{ github.sha }}
+          docker tag smartcampus-backend:${{ github.sha }} $IMAGE_REPOSITORY:latest
           docker push --all-tags $IMAGE_REPOSITORY
 
           docker tag smartcampus-frontend:${{ github.sha }} $FRONTEND_IMAGE_REPOSITORY:${{ github.sha }}
           docker tag smartcampus-frontend:${{ github.sha }} $FRONTEND_IMAGE_REPOSITORY:latest
           docker push --all-tags $FRONTEND_IMAGE_REPOSITORY
 
-  deploy-app:
+  deploy-compose:
     needs: build-image
     runs-on: self-hosted
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    concurrency: production
+    concurrency: production-compose
     steps:
       - uses: actions/checkout@v4
       # Stage 7 — Deploy: secrets injected at runtime, never written to the repo
@@ -196,3 +196,47 @@ jobs:
           docker compose pull backend frontend
           docker compose up -d --wait --no-build
           docker image prune -f
+
+  deploy-minikube:
+    needs: deploy-compose # Espera a que termine Docker Compose para no saturar el servidor
+    runs-on: self-hosted
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    concurrency: production-minikube
+    steps:
+      - uses: actions/checkout@v4
+      # Stage 7 — Deploy: secrets injected at runtime, never written to the repo
+
+      - name: Asegurar que Minikube está en ejecución
+        run: minikube status || minikube start
+        
+      - name: Deploy with Minikube
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+
+        run: |
+          # 1. Cargar las imágenes en Minikube
+          minikube image load ${{ env.IMAGE_REPOSITORY }}:${{ github.sha }}
+          minikube image load ${{ env.FRONTEND_IMAGE_REPOSITORY }}:${{ github.sha }}
+
+          # 2. Reemplazar dinámicamente las etiquetas en los YAML
+          sed -i "s|image: ${{ env.IMAGE_REPOSITORY }}:.*|image: ${{ env.IMAGE_REPOSITORY }}:${{ github.sha }}|g" k8s/backend-deployment.yaml
+          sed -i "s|image: ${{ env.FRONTEND_IMAGE_REPOSITORY }}:.*|image: ${{ env.FRONTEND_IMAGE_REPOSITORY }}:${{ github.sha }}|g" k8s/frontend-deployment.yaml
+
+          # 3. Namespace primero: el resto de recursos dependen de él
+          kubectl apply -f k8s/namespace.yaml
+
+          # 4. Secret creado desde GitHub Secrets (idempotente, nunca se escribe en el repo)
+          kubectl -n smartcampus create secret generic smartcampus-secret \
+            --from-literal=DB_USER=smartcampus \
+            --from-literal=DB_PASSWORD="$DB_PASSWORD" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # 5. Aplicar los manifiestos
+          kubectl apply -f k8s/
+
+          # 6. Esperar a que todo esté listo (falla el job si no arranca)
+          kubectl -n smartcampus rollout status statefulset/database --timeout=180s
+          kubectl -n smartcampus rollout status deployment/backend --timeout=180s
+          kubectl -n smartcampus rollout status deployment/frontend --timeout=120s
+          kubectl -n smartcampus get pods,services,deployments,statefulsets

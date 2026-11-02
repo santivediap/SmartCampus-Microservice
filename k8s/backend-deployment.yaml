@@ -1,0 +1,98 @@
+# Stateless Flask REST API: 2 replicas behind backend-service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: smartcampus
+  labels:
+    app: backend
+    app.kubernetes.io/part-of: smartcampus
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Keep both replicas serving while a new version rolls out
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      # The app creates the schema at startup, so wait until Postgres accepts connections
+      initContainers:
+        - name: wait-for-database
+          image: postgres:15
+          command:
+            - sh
+            - -c
+            - until pg_isready -h "$DB_HOST" -p "$DB_PORT"; do echo "waiting for database"; sleep 2; done
+          envFrom:
+            - configMapRef:
+                name: smartcampus-config
+      containers:
+        - name: backend
+          # The CI/CD workflow replaces the tag with the commit SHA (sed)
+          image: hansjeffa/smartcampus-backend:latest
+          # Images are loaded into Minikube with "minikube image load"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5000
+          env:
+            # Non-sensitive values from the ConfigMap
+            - name: APP_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: smartcampus-config
+                  key: APP_ENV
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: smartcampus-config
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: smartcampus-config
+                  key: DB_PORT
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: smartcampus-config
+                  key: DB_NAME
+            # Credentials from the Secret
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: smartcampus-secret
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: smartcampus-secret
+                  key: DB_PASSWORD
+          # /health also runs "SELECT 1": the Pod only gets traffic when it reaches the DB
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          # TCP only: a DB outage must not make Kubernetes restart every backend Pod
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
