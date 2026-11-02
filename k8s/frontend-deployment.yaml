@@ -1,0 +1,53 @@
+# nginx serving the React build and proxying /api/* to backend-service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: smartcampus
+  labels:
+    app: frontend
+    app.kubernetes.io/part-of: smartcampus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          # The CI/CD workflow replaces the tag with the commit SHA (sed)
+          image: hansjeffa/smartcampus-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          env:
+            # Consumed by envsubst in nginx/default.conf.template at startup
+            - name: BACKEND_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: smartcampus-config
+                  key: BACKEND_URL
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
