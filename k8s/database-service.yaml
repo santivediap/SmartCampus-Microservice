@@ -1,0 +1,36 @@
+# Stable entry point used by the backend (DB_HOST=database-service)
+apiVersion: v1
+kind: Service
+metadata:
+  name: database-service
+  namespace: smartcampus
+  labels:
+    app: database
+    app.kubernetes.io/part-of: smartcampus
+spec:
+  type: ClusterIP
+  selector:
+    app: database
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+# Headless Service required by the StatefulSet: gives each Pod a stable
+# DNS name (database-0.database-headless.smartcampus.svc.cluster.local)
+apiVersion: v1
+kind: Service
+metadata:
+  name: database-headless
+  namespace: smartcampus
+  labels:
+    app: database
+    app.kubernetes.io/part-of: smartcampus
+spec:
+  clusterIP: None
+  selector:
+    app: database
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
