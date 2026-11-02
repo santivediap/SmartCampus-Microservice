@@ -1,0 +1,19 @@
+# Non-sensitive configuration shared by backend, frontend and database.
+# Pods read these values as env vars at startup: after changing them,
+# run "kubectl -n smartcampus rollout restart deployment/<name>" to apply.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smartcampus-config
+  namespace: smartcampus
+  labels:
+    app.kubernetes.io/part-of: smartcampus
+data:
+  APP_ENV: "production"
+  # Backend -> database through its Service (never a Pod IP)
+  DB_HOST: "database-service"
+  DB_PORT: "5432"
+  DB_NAME: "smartcampus"
+  # Frontend (nginx) -> backend through its Service.
+  # FQDN is required: nginx's resolver ignores the search domains in /etc/resolv.conf
+  BACKEND_URL: "http://backend-service.smartcampus.svc.cluster.local:5000"
