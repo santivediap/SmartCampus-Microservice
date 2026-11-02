@@ -437,7 +437,7 @@ Capturas en `docs/evidencias/`.
 | Pipeline completo en GitHub Actions | ![pipeline](docs/evidencias/pipeline.png) |
 | Matrix Python 3.11 / 3.12 | ![matrix](docs/evidencias/matrix.png) |
 | Secrets configurados | ![secrets](docs/evidencias/secrets.png) |
-| Imagen Docker construida / en Docker Hub | ![docker](docs/evidencias/docker-image.png) |
+| Imagen Docker construida / en Docker Hub | ![docker-frontend](docs/evidencias/docker-image-frontend.png) ![docker-backend](docs/evidencias/docker-image-backend.png) |
 | `docker compose ps` | ![compose](docs/evidencias/compose-ps.png) |
 | Aplicación desplegada (Compose) | ![app-compose](docs/evidencias/app-compose.png) |
 | `kubectl get pods,services,deployments` | ![k8s](docs/evidencias/k8s-get.png) |
