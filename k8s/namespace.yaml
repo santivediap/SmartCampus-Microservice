@@ -1,0 +1,7 @@
+# Isolates every SmartCampus resource from the rest of the cluster
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: smartcampus
+  labels:
+    app.kubernetes.io/part-of: smartcampus
